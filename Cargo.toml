@@ -1,9 +1,11 @@
 [package]
 name = "regdumper-rs"
 version = "0.1.0"
-edition = "2021"
+edition = "2023"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 winapi = { version = "0.3.9", features = ["minwindef", "winreg", "winbase", "handleapi", "securitybaseapi"] }
+whoami = "1.4.1"
+hex = "0.4.3"
