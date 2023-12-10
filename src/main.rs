@@ -122,22 +122,22 @@ fn main() {
         if !is_system() {
             get_system();
             //println!("Am I system?: {}", is_system());
-        }
+            
+            // set privileges for current impersonating thread
+            let (boolean, _result) = enable_thread_privilege(SE_BACKUP_NAME.as_ptr());
+            if !boolean {
+                println!("{_result}");
+            } 
 
-        // set privileges for current impersonating thread
-        let (boolean, _result) = enable_thread_privilege(SE_BACKUP_NAME.as_ptr());
-        if !boolean {
-            println!("{_result}");
-        } 
-
-        let (boolean, _result) = enable_thread_privilege(SE_DEBUG_NAME.as_ptr());
-        if !boolean {
-            println!("{_result}");
-        }    
+            let (boolean, _result) = enable_thread_privilege(SE_DEBUG_NAME.as_ptr());
+            if !boolean {
+                println!("{_result}");
+            }    
     
-        let (boolean, _result) = enable_thread_privilege(SE_RESTORE_NAME.as_ptr());
-        if !boolean {
-            println!("{_result}");
+            let (boolean, _result) = enable_thread_privilege(SE_RESTORE_NAME.as_ptr());
+            if !boolean {
+                println!("{_result}");
+            }
         }
 
         // dump SECURITY, as SYSTEM
